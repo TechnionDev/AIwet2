@@ -38,15 +38,15 @@ class GreedyMovePlayer(AbstractMovePlayer):
 
 class HeuristicFunction:
     def __init__(self):
-        self.w_empty = 2.7
+        self.w_empty = 4
         self.w_max_val = 1
         self.w_monotonic = 1
-        self.w_same_tiles = 1
+        self.w_same_tiles = 2
 
     def calc_heuristic(self, board):
         empty = self.w_empty * self._empty_cells(board)
         max_val = self.w_max_val * self._max_value(board)
-        mono_val = self.w_monotonic * self._monotonic_board(board)
+        mono_val = self.w_monotonic * self._monotonic_board_2(board)
         same_tiles_val = self.w_same_tiles * self._same_tiles(board)
 
         return empty + mono_val + max_val + same_tiles_val
@@ -76,8 +76,6 @@ class HeuristicFunction:
         right_to_left = 0
         up_to_down = 0
         down_to_up = 0
-        val_curr = 0
-        val_next = 0
         for x in range(GRID_LEN):
             for y in range(GRID_LEN - 1):
                 # horizontal
@@ -101,6 +99,28 @@ class HeuristicFunction:
         if res == 0:
             return 0
         return log(res)
+
+    def _monotonic_board_2(self, board):
+        left_to_right = 0
+        up_to_down = 0
+        for x in range(GRID_LEN):
+            for y in range(GRID_LEN - 1):
+                # horizontal
+                val_curr = board[x][y]
+                val_next = board[x][y + 1]
+                if (val_curr != 0 or val_next != 0) and val_curr < val_next:
+                    left_to_right += val_next - val_curr
+
+                # vertical
+                val_curr = board[y][x]
+                val_next = board[y + 1][x]
+                if (val_curr != 0 or val_next != 0) and val_curr < val_next:
+                    up_to_down += val_next - val_curr
+
+        res = left_to_right + up_to_down
+        if res == 0:
+            return 0
+        return -log(res)
 
     def _same_tiles(self, board):
         counter = 0
