@@ -4,8 +4,12 @@ from AbstractPlayers import *
 from math import log
 import time
 import copy
+import signal
 
 inf = 1 << 32
+PROBABILITY_2 = 0.9
+PROBABILITY_4 = 0.1
+
 # commands to use for move players. dictionary : Move(enum) -> function(board),
 # all the functions {up,down,left,right) receive board as parameter and return tuple of (new_board, done, score).
 # new_board is according to the step taken, done is true if the step is legal, score is the sum of all numbers that
@@ -15,6 +19,10 @@ from constants import *
 
 commands = {Move.UP: logic.up, Move.DOWN: logic.down,
             Move.LEFT: logic.left, Move.RIGHT: logic.right}
+
+
+def signal_handler(signum, frame):
+    raise Exception("Timeout")
 
 
 # generate value between {2,4} with probability p for 4
@@ -259,6 +267,7 @@ class MiniMaxIndexPlayer(AbstractIndexPlayer):
         time_last_iteration = 0
         iteration = 0
         start = time.time()
+
         while time_last_iteration * 16 < time_limit - (time.time() - start):
             # while iteration < 2:  # debug
             start_iteration = time.time()
@@ -303,22 +312,32 @@ class ABMovePlayer(AbstractMovePlayer):
 
     def __init__(self):
         AbstractMovePlayer.__init__(self)
-        # TODO: add here if needed
 
     def get_move(self, board, time_limit) -> Move:
-        move = Move.LEFT  # just to initialize
-        time_last_iteration = 0
-        iteration = 0
+        move = Move.LEFT
         start = time.time()
-        while time_last_iteration * 16 < time_limit - (time.time() - start):
-            # while iteration < 2:  # debug
-            start_iteration = time.time()
-            move = self.min_max_move(board, iteration)[0]
-            time_last_iteration = time.time() - start_iteration
-            iteration += 1
-        print(f"move: {iteration}")
-        print(f"move last iter{time_last_iteration}")
+        iter = 0
+        signal.signal(signal.SIGALRM, signal_handler)
+        signal.setitimer(signal.ITIMER_REAL, 0.95 * time_limit)
+        try:
+            while True:
+                move = ABMovePlayer.min_max_move(board, iter)[0]
+                iter += 1
+        except Exception as msg:
+            print('')
+        # min_max_thread = multiprocessing.Process(target=self.iterative_deepening_min_max(board),
+        #                                         name="min_max_move", args=(self, board))
+        # print('Here')
+        # min_max_thread.start()
+        # min_max_thread.join(0.9 * time_limit)
+        #
+        # if min_max_thread.is_alive():
+        #     min_max_thread.terminate()
+        #     min_max_thread.join()
+
+        print(f"move: {iter}")
         print(f"move time left: {time_limit - (time.time() - start)}")
+
         return move
 
     @staticmethod
@@ -368,7 +387,8 @@ class ABMovePlayer(AbstractMovePlayer):
                     if board[row][col] == 0:
                         new_board = copy.deepcopy(board)
                         new_board[row][col] = 2
-                        optional_index_score[(row, col)] = (ABMovePlayer.min_max_move(new_board, iteration - 1, alpha, beta))[1]
+                        optional_index_score[(row, col)] = \
+                            (ABMovePlayer.min_max_move(new_board, iteration - 1, alpha, beta))[1]
                         beta = min(beta, optional_index_score[(row, col)])
                         if beta <= alpha:
                             break
@@ -384,13 +404,47 @@ class ExpectimaxMovePlayer(AbstractMovePlayer):
 
     def __init__(self):
         AbstractMovePlayer.__init__(self)
-        # TODO: add here if needed
 
     def get_move(self, board, time_limit) -> Move:
-        # TODO: erase the following line and implement this function.
-        raise NotImplementedError
+        move = Move.LEFT
+        iter = 0
+        signal.signal(signal.SIGALRM, signal_handler)
+        signal.setitimer(signal.ITIMER_REAL, 0.95 * time_limit)
+        try:
+            while True:
+                move = ExpectimaxMovePlayer.min_max_move(board, iter)[0]
+                iter += 1
+        except Exception as msg:
+            print('')
 
-    # TODO: add here helper functions in class, if needed
+        return move
+
+    @staticmethod
+    def min_max_move(board, iteration) -> (Move, float):
+        optional_moves_score = {}
+        if iteration == 0:
+            heuristic = HeuristicFunction()
+            for move in Move:
+                new_board, done, score = commands[move](board)
+                if done:
+                    optional_moves_score[move] = heuristic.calc_heuristic(new_board)
+            if not optional_moves_score:
+                return Move.LEFT, 0  # need to put something in the second value
+            else:
+                res_move = max(optional_moves_score, key=optional_moves_score.get)
+                return res_move, optional_moves_score[res_move]
+        else:
+            for move in Move:
+                new_board, done, score = commands[move](board)
+                if done:
+                    optional_moves_score[move] = ExpectimaxIndexPlayer.min_max_index(new_board, iteration - 1, 2)[1]*PROBABILITY_2
+                    optional_moves_score[move] += ExpectimaxIndexPlayer.min_max_index(new_board, iteration - 1, 4)[1]*PROBABILITY_4
+
+            if not optional_moves_score:
+                return Move.LEFT, 0
+            else:
+                res_move = max(optional_moves_score, key=optional_moves_score.get)
+                return res_move, optional_moves_score[res_move]
 
 
 class ExpectimaxIndexPlayer(AbstractIndexPlayer):
@@ -404,10 +458,42 @@ class ExpectimaxIndexPlayer(AbstractIndexPlayer):
         # TODO: add here if needed
 
     def get_indices(self, board, value, time_limit) -> (int, int):
-        # TODO: erase the following line and implement this function.
-        raise NotImplementedError
+        row = 0
+        col = 0
+        iteration = 0
 
-    # TODO: add here helper functions in class, if needed
+        signal.signal(signal.SIGALRM, signal_handler)
+        signal.setitimer(signal.ITIMER_REAL, 0.95 * time_limit)
+        try:
+            while True:
+                row, col = self.min_max_index(board, iteration, value)[0]
+                iteration += 1
+        except Exception as msg:
+            print('')
+        return row, col
+
+    @staticmethod
+    def min_max_index(board, iteration, value) -> ((int, int), float):
+        optional_index_score = {}
+        if iteration == 0:
+            heuristic = HeuristicFunction()
+            for row in range(GRID_LEN):
+                for col in range(GRID_LEN):
+                    if board[row][col] == 0:
+                        new_board = copy.deepcopy(board)
+                        new_board[row][col] = value
+                        optional_index_score[(row, col)] = heuristic.calc_heuristic(new_board)
+            res_index = min(optional_index_score, key=optional_index_score.get)
+            return res_index, optional_index_score[res_index]
+        else:
+            for row in range(GRID_LEN):
+                for col in range(GRID_LEN):
+                    if board[row][col] == 0:
+                        new_board = copy.deepcopy(board)
+                        new_board[row][col] = value
+                        optional_index_score[(row, col)] = \
+                            (ExpectimaxMovePlayer.min_max_move(new_board, iteration - 1))[1]
+            return min(optional_index_score, key=optional_index_score.get), min(optional_index_score.values())
 
 
 # Tournament
