@@ -4,7 +4,7 @@ from AbstractPlayers import *
 from math import log
 import copy
 import signal
-
+import time
 inf = 1 << 32
 PROBABILITY_2 = 0.9
 PROBABILITY_4 = 0.1
@@ -210,6 +210,7 @@ class MiniMaxMovePlayer(AbstractMovePlayer):
     def get_move(self, board, time_limit) -> Move:
         move = Move.LEFT
         iter = 0
+        start = time.time()
         signal.signal(signal.SIGALRM, signal_handler)
         signal.setitimer(signal.ITIMER_REAL, 0.80 * time_limit)
         try:
@@ -218,6 +219,7 @@ class MiniMaxMovePlayer(AbstractMovePlayer):
                 iter += 1
         except Exception as msg:
             pass
+        # print(time.time()-start)
         print(iter)
         return move
 
@@ -309,6 +311,7 @@ class ABMovePlayer(AbstractMovePlayer):
     def get_move(self, board, time_limit) -> Move:
         move = Move.LEFT
         iter = 0
+        start = time.time()
         signal.signal(signal.SIGALRM, signal_handler)
         signal.setitimer(signal.ITIMER_REAL, 0.80 * time_limit)
         try:
@@ -316,12 +319,14 @@ class ABMovePlayer(AbstractMovePlayer):
                 move = ABMovePlayer.min_max_move(board, iter)[0]
                 iter += 1
         except Exception as msg:
+            # print("stopped")
             pass
-        print(iter)
+        # print(iter,time.time()-start)
         return move
 
     @staticmethod
     def min_max_move(board, iteration, alpha=-inf, beta=inf) -> (Move, float):
+        # print("now im in AB:min_max_move")
         optional_moves_score = {}
         if iteration == 0:
             heuristic = HeuristicFunction()
@@ -350,6 +355,7 @@ class ABMovePlayer(AbstractMovePlayer):
 
     @staticmethod
     def min_max_index(board, iteration, alpha=-inf, beta=inf) -> ((int, int), float):
+        # print("now im in AB:min_max_index")
         optional_index_score = {}
         if iteration == 0:
             heuristic = HeuristicFunction()
@@ -487,10 +493,18 @@ class ContestMovePlayer(AbstractMovePlayer):
 
     def __init__(self):
         AbstractMovePlayer.__init__(self)
-        # TODO: add here if needed
 
     def get_move(self, board, time_limit) -> Move:
-        # TODO: erase the following line and implement this function.
-        raise NotImplementedError
-
-    # TODO: add here helper functions in class, if needed
+        move = Move.LEFT
+        iter = 0
+        start = time.time()
+        signal.signal(signal.SIGALRM, signal_handler)
+        signal.setitimer(signal.ITIMER_REAL, 0.80 * time_limit)
+        try:
+            while True:
+                move = ABMovePlayer.min_max_move(board, iter)[0]
+                iter += 1
+        except Exception as msg:
+            pass
+        print(iter, time.time() - start)
+        return move
