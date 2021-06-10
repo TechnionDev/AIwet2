@@ -5,9 +5,6 @@ from math import log
 import copy
 import signal
 import time
-inf = 1 << 32
-PROBABILITY_2 = 0.9
-PROBABILITY_4 = 0.1
 
 # commands to use for move players. dictionary : Move(enum) -> function(board),
 # all the functions {up,down,left,right) receive board as parameter and return tuple of (new_board, done, score).
@@ -15,6 +12,10 @@ PROBABILITY_4 = 0.1
 # combined in this step.
 # (you can see GreedyMovePlayer implementation for example)
 from constants import *
+
+inf = 1 << 32
+PROBABILITY_2 = 0.9
+PROBABILITY_4 = 0.1
 
 commands = {Move.UP: logic.up, Move.DOWN: logic.down,
             Move.LEFT: logic.left, Move.RIGHT: logic.right}
@@ -45,120 +46,77 @@ class GreedyMovePlayer(AbstractMovePlayer):
         return max(optional_moves_score, key=optional_moves_score.get)
 
 
-class HeuristicFunction:
-    def __init__(self):
+def calc_heuristic(board):
+    empty = 3 * _empty_cells(board)
+    max_val = 3 * _max_value(board)
+    mono_val = 1 * _monotonic_board_2(board)
+    same_tiles_val = 2 * _same_tiles(board)
+    return empty + mono_val + max_val + same_tiles_val
 
-        self.w_empty = 3
-        self.w_max_val = 3
-        self.w_monotonic = 1
-        self.w_same_tiles = 2
-        # self.w_empty = 1
-        # self.w_max_val = 1
-        # self.w_monotonic = 0
-        # self.w_same_tiles = 0
 
-    def calc_heuristic(self, board):
-        empty = self.w_empty * self._empty_cells(board)
-        max_val = self.w_max_val * self._max_value(board)
-        mono_val = self.w_monotonic * self._monotonic_board_2(board)
-        same_tiles_val = self.w_same_tiles * self._same_tiles(board)
-        # print(f'empty: {empty}, max_val: {max_val}, mono_val: {mono_val}, merge: {same_tiles_val}')
-        return empty + mono_val + max_val + same_tiles_val
+def _empty_cells(board) -> float:
+    empty_cells = 0
+    for i in range(GRID_LEN):
+        for j in range(GRID_LEN):
+            if board[i][j] == 0:
+                empty_cells += 1
+    return empty_cells
 
-    def _empty_cells(self, board) -> float:
-        empty_cells = 0
-        for i in range(GRID_LEN):
-            for j in range(GRID_LEN):
-                if board[i][j] == 0:
-                    empty_cells += 1
 
-        if empty_cells == 0:
-            return 1
-        res = log(empty_cells)
-        return res
+def _max_value(board) -> float:
+    max_val = 0
+    for i in range(GRID_LEN):
+        for j in range(GRID_LEN):
+            if board[i][j] > max_val:
+                max_val = board[i][j]
+    return log(max_val)
 
-    def _max_value(self, board) -> float:
-        max_val = 0
-        for i in range(GRID_LEN):
-            for j in range(GRID_LEN):
-                if board[i][j] > max_val:
-                    max_val = board[i][j]
-        return log(max_val)
 
-    def _monotonic_board(self, board):
-        left_to_right = 0
-        right_to_left = 0
-        up_to_down = 0
-        down_to_up = 0
-        for x in range(GRID_LEN):
-            for y in range(GRID_LEN - 1):
-                # horizontal
-                val_curr = board[x][y]
-                val_next = board[x][y + 1]
-                if val_curr != 0 or val_next != 0:
-                    if val_curr >= val_next:
-                        left_to_right += 1
-                    if val_next >= val_curr:
-                        right_to_left += 1
+def _monotonic_board_2(board):
+    left_to_right = 0
+    right_to_left = 0
+    up_to_down = 0
+    down_to_up = 0
+    for x in range(GRID_LEN):
+        for y in range(GRID_LEN - 1):
+            # horizontal
+            val_curr = board[x][y]
+            val_next = board[x][y + 1]
+            if val_curr != 0 or val_next != 0:
+                if val_curr < val_next:
+                    left_to_right += val_next - val_curr
+                if val_curr > val_next:
+                    right_to_left += val_curr - val_next
+            # vertical
+            val_curr = board[y][x]
+            val_next = board[y + 1][x]
+            if val_curr != 0 or val_next != 0:
+                if val_curr < val_next:
+                    up_to_down += val_next - val_curr
+                if val_curr > val_next:
+                    down_to_up += val_curr - val_next
 
-                    # vertical
-                val_curr = board[y][x]
-                val_next = board[y + 1][x]
-                if val_curr != 0 or val_next != 0:
-                    if val_curr >= val_next:
-                        up_to_down += 1
-                    if val_next >= val_curr:
-                        down_to_up += 1
-        res = max(right_to_left, left_to_right) + max(down_to_up, up_to_down)
-        if res == 0:
-            return 0
-        return log(res)
+    res = min(left_to_right, right_to_left) + min(up_to_down, down_to_up)
+    if res == 0:
+        return 0
+    return -log(res)
 
-    def _monotonic_board_2(self, board):
-        left_to_right = 0
-        right_to_left = 0
-        up_to_down = 0
-        down_to_up = 0
-        for x in range(GRID_LEN):
-            for y in range(GRID_LEN - 1):
-                # horizontal
-                val_curr = board[x][y]
-                val_next = board[x][y + 1]
-                if val_curr != 0 or val_next != 0:
-                    if val_curr < val_next:
-                        left_to_right += val_next - val_curr
-                    if val_curr > val_next:
-                        right_to_left += val_curr - val_next
 
-                # vertical
-                val_curr = board[y][x]
-                val_next = board[y + 1][x]
-                if val_curr != 0 or val_next != 0:
-                    if val_curr < val_next:
-                        up_to_down += val_next - val_curr
-                    if val_curr > val_next:
-                        down_to_up += val_curr - val_next
-
-        res = min(left_to_right, right_to_left) + min(up_to_down, down_to_up)
-        if res == 0:
-            return 0
-        return -log(res)
-
-    def _same_tiles(self, board):
-        counter = 0
-        for row in range(GRID_LEN):
-            for col in range(GRID_LEN - 1):
-                if board[row][col] == board[row][col + 1] and board[row][col] != 0:
-                    counter += 1
-                    col += 1
-        for col in range(GRID_LEN):
-            for row in range(GRID_LEN - 1):
-                if board[row][col] == board[row + 1][col] and board[row][col] != 0:
-                    counter += 1
-                    row += 1
-        if counter == 0:
-            return 0
-        return log(counter)
+def _same_tiles(board):
+    counter = 0
+    for row in range(GRID_LEN):
+        for col in range(GRID_LEN - 1):
+            if board[row][col] == board[row][col + 1] and board[row][col] != 0:
+                counter += 1
+                col += 1
+    for col in range(GRID_LEN):
+        for row in range(GRID_LEN - 1):
+            if board[row][col] == board[row + 1][col] and board[row][col] != 0:
+                counter += 1
+                row += 1
+    if counter == 0:
+        return 0
+    return counter
 
 
 class RandomIndexPlayer(AbstractIndexPlayer):
@@ -188,11 +146,10 @@ class ImprovedGreedyMovePlayer(AbstractMovePlayer):
 
     def get_move(self, board, time_limit) -> Move:
         optional_moves_score = {}
-        heuristic = HeuristicFunction()
         for move in Move:
             new_board, done, score = commands[move](board)
             if done:
-                optional_moves_score[move] = heuristic.calc_heuristic(new_board)
+                optional_moves_score[move] = calc_heuristic(new_board)
 
         return max(optional_moves_score, key=optional_moves_score.get)
 
@@ -210,16 +167,14 @@ class MiniMaxMovePlayer(AbstractMovePlayer):
     def get_move(self, board, time_limit) -> Move:
         move = Move.LEFT
         iter = 0
-        start = time.time()
         signal.signal(signal.SIGALRM, signal_handler)
-        signal.setitimer(signal.ITIMER_REAL, 0.80 * time_limit)
+        signal.setitimer(signal.ITIMER_REAL, 0.8 * time_limit)
         try:
             while True:
                 move = MiniMaxMovePlayer.min_max_move(board, iter)[0]
                 iter += 1
         except Exception as msg:
             pass
-        # print(time.time()-start)
         print(iter)
         return move
 
@@ -227,11 +182,10 @@ class MiniMaxMovePlayer(AbstractMovePlayer):
     def min_max_move(board, iteration) -> (Move, float):
         optional_moves_score = {}
         if iteration == 0:
-            heuristic = HeuristicFunction()
             for move in Move:
                 new_board, done, score = commands[move](board)
                 if done:
-                    optional_moves_score[move] = heuristic.calc_heuristic(new_board)
+                    optional_moves_score[move] = calc_heuristic(new_board)
             if not optional_moves_score:
                 return Move.LEFT, 0  # need to put something in the second value
             else:
@@ -279,13 +233,12 @@ class MiniMaxIndexPlayer(AbstractIndexPlayer):
     def min_max_index(board, iteration) -> ((int, int), float):
         optional_index_score = {}
         if iteration == 0:
-            heuristic = HeuristicFunction()
             for row in range(GRID_LEN):
                 for col in range(GRID_LEN):
                     if board[row][col] == 0:
                         new_board = copy.deepcopy(board)
                         new_board[row][col] = 2
-                        optional_index_score[(row, col)] = heuristic.calc_heuristic(new_board)
+                        optional_index_score[(row, col)] = calc_heuristic(new_board)
             res_index = min(optional_index_score, key=optional_index_score.get)
             return res_index, optional_index_score[res_index]
         else:
@@ -319,21 +272,17 @@ class ABMovePlayer(AbstractMovePlayer):
                 move = ABMovePlayer.min_max_move(board, iter)[0]
                 iter += 1
         except Exception as msg:
-            # print("stopped")
             pass
-        # print(iter,time.time()-start)
         return move
 
     @staticmethod
     def min_max_move(board, iteration, alpha=-inf, beta=inf) -> (Move, float):
-        # print("now im in AB:min_max_move")
         optional_moves_score = {}
         if iteration == 0:
-            heuristic = HeuristicFunction()
             for move in Move:
                 new_board, done, score = commands[move](board)
                 if done:
-                    optional_moves_score[move] = heuristic.calc_heuristic(new_board)
+                    optional_moves_score[move] = calc_heuristic(new_board)
             if not optional_moves_score:
                 return Move.LEFT, 0  # need to put something in the second value
             else:
@@ -355,16 +304,14 @@ class ABMovePlayer(AbstractMovePlayer):
 
     @staticmethod
     def min_max_index(board, iteration, alpha=-inf, beta=inf) -> ((int, int), float):
-        # print("now im in AB:min_max_index")
         optional_index_score = {}
         if iteration == 0:
-            heuristic = HeuristicFunction()
             for row in range(GRID_LEN):
                 for col in range(GRID_LEN):
                     if board[row][col] == 0:
                         new_board = copy.deepcopy(board)
                         new_board[row][col] = 2
-                        optional_index_score[(row, col)] = heuristic.calc_heuristic(new_board)
+                        optional_index_score[(row, col)] = calc_heuristic(new_board)
             res_index = min(optional_index_score, key=optional_index_score.get)
             return res_index, optional_index_score[res_index]
         else:
@@ -409,11 +356,10 @@ class ExpectimaxMovePlayer(AbstractMovePlayer):
     def min_max_move(board, iteration) -> (Move, float):
         optional_moves_score = {}
         if iteration == 0:
-            heuristic = HeuristicFunction()
             for move in Move:
                 new_board, done, score = commands[move](board)
                 if done:
-                    optional_moves_score[move] = heuristic.calc_heuristic(new_board)
+                    optional_moves_score[move] = calc_heuristic(new_board)
             if not optional_moves_score:
                 return Move.LEFT, 0  # need to put something in the second value
             else:
@@ -443,7 +389,6 @@ class ExpectimaxIndexPlayer(AbstractIndexPlayer):
 
     def __init__(self):
         AbstractIndexPlayer.__init__(self)
-        # TODO: add here if needed
 
     def get_indices(self, board, value, time_limit) -> (int, int):
         row = 0
@@ -464,13 +409,12 @@ class ExpectimaxIndexPlayer(AbstractIndexPlayer):
     def min_max_index(board, iteration, value) -> ((int, int), float):
         optional_index_score = {}
         if iteration == 0:
-            heuristic = HeuristicFunction()
             for row in range(GRID_LEN):
                 for col in range(GRID_LEN):
                     if board[row][col] == 0:
                         new_board = copy.deepcopy(board)
                         new_board[row][col] = value
-                        optional_index_score[(row, col)] = heuristic.calc_heuristic(new_board)
+                        optional_index_score[(row, col)] = calc_heuristic(new_board)
             res_index = min(optional_index_score, key=optional_index_score.get)
             return res_index, optional_index_score[res_index]
         else:
@@ -497,14 +441,12 @@ class ContestMovePlayer(AbstractMovePlayer):
     def get_move(self, board, time_limit) -> Move:
         move = Move.LEFT
         iter = 0
-        start = time.time()
         signal.signal(signal.SIGALRM, signal_handler)
         signal.setitimer(signal.ITIMER_REAL, 0.80 * time_limit)
         try:
             while True:
                 move = ABMovePlayer.min_max_move(board, iter)[0]
                 iter += 1
-        except Exception as msg:
+        except Exception:
             pass
-        print(iter, time.time() - start)
         return move
