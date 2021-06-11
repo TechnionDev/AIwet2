@@ -175,7 +175,6 @@ class MiniMaxMovePlayer(AbstractMovePlayer):
                 iter += 1
         except Exception as msg:
             pass
-        print(iter)
         return move
 
     @staticmethod
